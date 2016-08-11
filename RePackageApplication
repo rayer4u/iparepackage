@@ -24,6 +24,7 @@ GetOptions ( \%opt,
              "embed|e=s",
              "output|o=s",
              "symbols=s",
+	     "entitlements|t=s",
              "verbose|v!",
              "help|h|?",
              "man",
@@ -131,8 +132,16 @@ if ( defined $opt{sign} ) {
     my $entitlements_plist = File::Temp::tempnam($tmpDir, "entitlements_plist");
 
     # If re-signing with a distribution profile, just make entitlement from 
-    # mobileprovision
-    if ( $opt{sign} =~ /^i(Phone|OS) Distribution/ ) {
+    # mobileprovision or from package
+    if ( defined $opt{entitlements} ) {
+        $plist = runCmd("/bin/cat", "$destApp/$opt{entitlements}");
+        $? == 0 or fatal("Failed to get entitlements from '$destApp/$opt{entitlements}'");
+        open(my $ofh, '>', $entitlements_plist) or fatal("Cannot open '$entitlements_plist': $!");
+        print $ofh $plist or fatal("Cannot write entitlements to '$entitlements_plist': $!");
+        close($ofh) or fatal("Cannot close file handle for '$entitlements_plist': $!");
+        runCmd('/usr/bin/plutil', '-lint', $entitlements_plist);
+        $? == 0 or fatal("Invalid plist at '$entitlements_plist'");
+    } else {
         my $entitlements_raw = File::Temp::tempnam($tmpDir, "entitlements_raw");
         runCmd("/usr/bin/security", "cms", "-D", "-i", $opt{embed}, "-o", $entitlements_raw);
         $? == 0 or fatal("Failed to read entitlements from '$opt{embed}'");
@@ -148,6 +157,7 @@ if ( defined $opt{sign} ) {
         }
     }
 
+    # resource-rules discard
     my @codesign_args = ("/usr/bin/codesign", "--force", "--preserve-metadata=identifier,entitlements",
                          "--sign", $opt{sign});
 
